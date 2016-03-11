@@ -5,7 +5,6 @@
 #include <ros/ros.h>
 #include <tf/transform_listener.h>
 #include <tf/transform_broadcaster.h>
-//#include <tf/transform_broadcaster.h>
 
 #include <rws2016_libs/team_info.h>
 #include <rws2016_msgs/GameMove.h>
@@ -85,6 +84,36 @@ namespace rws2016_rsalgueiro
                 catch (tf::TransformException& ex){
                     ROS_ERROR("%s",ex.what());
                     ros::Duration(0.1).sleep();
+                    return 999;
+                }
+
+                tf::Transform t;
+                t.setOrigin(st.getOrigin());
+                t.setRotation(st.getRotation());
+
+                double x = t.getOrigin().x();
+                double y = t.getOrigin().y();
+
+                double norm = sqrt(x*x + y*y);
+                return norm;
+
+            }
+            
+            double getDistance(string playerName)
+            {
+                //computing the distance 
+                string first_refframe = name;
+                string second_refframe = playerName;
+
+                ros::Duration(0.01).sleep(); //To allow the listener to hear messages
+                tf::StampedTransform st; //The pose of the player
+                try{
+                    listener.lookupTransform(first_refframe, second_refframe, ros::Time(0), st);
+                }
+                catch (tf::TransformException& ex){
+                    ROS_ERROR("%s",ex.what());
+                    ros::Duration(0.1).sleep();
+                    return 999;
                 }
 
                 tf::Transform t;
@@ -113,6 +142,7 @@ namespace rws2016_rsalgueiro
                 catch (tf::TransformException& ex){
                     ROS_ERROR("%s",ex.what());
                     ros::Duration(0.1).sleep();
+                    return 999;
                 }
 
                 tf::Transform t;
@@ -137,7 +167,7 @@ namespace rws2016_rsalgueiro
             /**
              * @brief Gets the pose (calls updatePose first)
              *
-             * @return the transform from map to the /moliveira local reference frame
+             * @return the transform from map to the /jalves local reference frame
              */
             tf::Transform getPose(void)
             {
@@ -241,22 +271,17 @@ namespace rws2016_rsalgueiro
             /**
              * @brief The teams
              */
+
+            string prevHuntName;
+            int prevHuntDistance;
+            string prevPreyName;
+            int prevPreyDistance;
+
             boost::shared_ptr<Team> my_team;
             boost::shared_ptr<Team> hunter_team;
             boost::shared_ptr<Team> prey_team;
 
             boost::shared_ptr<ros::Subscriber> _sub; 
-
-	    ~MyPlayer()   
-        {
-            tf::Transform t;
-            t.setOrigin( tf::Vector3(15, 15, 0.0) );
-            tf::Quaternion q; q.setRPY(0, 0, 0);
-            t.setRotation(q);
-            br.sendTransform(tf::StampedTransform(t, ros::Time::now(), "/map", name));
-            br.sendTransform(tf::StampedTransform(t, ros::Time::now() + ros::Duration(2), "/map", name));
-        }
-
 
             /**
              * @brief Constructor
@@ -268,6 +293,8 @@ namespace rws2016_rsalgueiro
         {
             setTeamName(team);
             ros::NodeHandle node;
+            prevHuntName="";
+            prevPreyName="";
 
             //Initialize teams
             vector<string> myTeam_names, myHunters_names, myPreys_names;
@@ -275,7 +302,7 @@ namespace rws2016_rsalgueiro
 
             if (!team_info(node, myTeam_names, myHunters_names, myPreys_names, myTeamId, myHuntersId, myPreysId))
                 ROS_ERROR("Something went wrong reading teams");
-
+        
             my_team = (boost::shared_ptr<Team>) new Team(myTeamId, myTeam_names);
             hunter_team = (boost::shared_ptr<Team>) new Team(myHuntersId, myHunters_names);
             prey_team = (boost::shared_ptr<Team>) new Team(myPreysId, myPreys_names);
@@ -287,10 +314,9 @@ namespace rws2016_rsalgueiro
             //Initialize position according to team
             ros::Duration(0.5).sleep(); //sleep to make sure the time is correct
             tf::Transform t;
-            //srand((unsigned)time(NULL)); // To start the player in a random location
             struct timeval t1;      
             gettimeofday(&t1, NULL);
-        srand(t1.tv_usec);
+            srand(t1.tv_usec);
             double X=((((double)rand()/(double)RAND_MAX) ) * 2 -1) * 5 ;
             double Y=((((double)rand()/(double)RAND_MAX) ) * 2 -1) * 5 ;
             t.setOrigin( tf::Vector3(X, Y, 0.0) );
@@ -302,6 +328,20 @@ namespace rws2016_rsalgueiro
             _sub = (boost::shared_ptr<ros::Subscriber>) new ros::Subscriber;
             *_sub = node.subscribe("/game_move", 1, &MyPlayer::moveCallback, this);
 
+        }
+
+        ~MyPlayer()
+        {
+          /*tf::Transform t_mov;
+          t_mov.setOrigin( tf::Vector3(displacement , 0, 0.0) );
+          tf::Quaternion q;
+          q.setRPY(0, 0, turn_angle);
+          t_mov.setRotation(q);
+          tf::Transform t = getPose();
+          t = t  * t_mov;
+          //Send the new transform to ROS
+          br.sendTransform(tf::StampedTransform(t, ros::Time::now(), "/map", name));
+*/
 
         }
 
@@ -358,22 +398,20 @@ namespace rws2016_rsalgueiro
 
                 return prey_name;
             }
-
-
- 		string getNameOfClosestTeam(boost::shared_ptr<Team> t)
+            
+            string getNameOfClosestHunter(void)
             {
-                double prey_dist = getDistance(*t->players[0]);
-                string prey_name = t->players[0]->name;
+                double prey_dist = getDistance(*hunter_team->players[0]);
+                string prey_name = hunter_team->players[0]->name;
 
-                for (size_t i = 1; i < t->players.size(); ++i)
+                for (size_t i = 1; i < hunter_team->players.size(); ++i)
                 {
-                    double d = getDistance(*t->players[i]);
+                    double d = getDistance(*hunter_team->players[i]);
 
                     if (d < prey_dist) //A new minimum
                     {
                         prey_dist = d;
-                        prey_name = t->players[i]->name;
-			
+                        prey_name = hunter_team->players[i]->name;
                     }
                 }
 
@@ -381,15 +419,14 @@ namespace rws2016_rsalgueiro
             }
 
 
-
             /**
              * @brief called whenever a /game_move msg is received
              *
              * @param msg the msg with the animal values
              */
-             void moveCallback(const rws2016_msgs::GameMove& msg)
+            void moveCallback(const rws2016_msgs::GameMove& msg)
             {
-                ROS_INFO("player %s received game_move msg", name.c_str());
+                ROS_INFO("player %s received game_move msg", name.c_str()); 
 
                 //I will encode a very simple hunting behaviour:
                 //
@@ -399,43 +436,62 @@ namespace rws2016_rsalgueiro
                 //4. Move maximum displacement towards angle to prey (limited by min, max)
 
                 //Step 1
-                string closest_prey = getNameOfClosestPrey();
-                ROS_INFO("Closest prey is %s", closest_prey.c_str());
+                if(!prevHuntName.compare(""))
+                {
+                  prevHuntName = getNameOfClosestHunter();
+                  prevHuntDistance=getDistance(prevHuntName);
+                }
+                else
+                {
+                  double distance = getDistance(prevHuntName);
+                  if(distance > prevHuntDistance+1 || distance < prevHuntDistance-1)
+                  {
+                    prevHuntName=getNameOfClosestHunter();
+                    prevHuntDistance=getDistance(prevHuntName);
+                  }
+                  else
+                  {
 
-                string closest_hunter = getNameOfClosestTeam(hunter_team);
-                ROS_INFO("Closest hunter is %s", closest_hunter.c_str());
+                    double hunter_angle = getAngle(prevHuntName);
+                    double displacement = msg.turtle; //I am a cat, others may choose another animal
 
+                    if(prevHuntDistance<1.5)
+                      move(-displacement, hunter_angle);
+                  }
 
+                }
+                if(!prevPreyName.compare(""))
+                {
+                  string closest_prey = getNameOfClosestPrey();
+                  prevPreyName=closest_prey;
+                  prevPreyDistance=getDistance(closest_prey);
+                }
+                else
+                {
+                  double distance = getDistance(prevPreyName);
+                  if(distance > prevPreyDistance+1 || distance < prevPreyDistance-1)
+                  {
+                    prevPreyName=getNameOfClosestPrey();
+                    prevPreyDistance=getDistance(prevPreyName);
+                  }
+                }
+
+                //ROS_INFO("Closest prey is %s", closest_prey.c_str());
+                /*string closest_hunter = getNameOfClosestHunter();
+                tf::Transform pose=getPose();*/
                 //Step 2
-                double angle_prey = getAngle(closest_prey);
-                double angle_hunter = getAngle(closest_hunter);
+                //double distance= getDistance(closest_hunter);
+                double angle = getAngle(prevPreyName);
+                double hunter_angle = getAngle(prevHuntName);
 
-                //double distance_prey = getDistance(closest_prey);
-                //double distance_hunter = getDistance(closest_hunter);
-
-                double angle;
-                double displacement;
-
-                //if (distance_hunter < 2.0 && distance_hunter > 1.5)
-                {
-                    angle = angle_prey + M_PI/2;
-                    displacement = -0.1;
-                }
-
-                //if (distance_hunter < 1.5)
-                {
-                    angle = angle_prey + M_PI/2;
-                    displacement = msg.cheetah;
-                }
-                //else if (distance_hunter>2)
-                {
-                     angle = angle_prey;
-                     displacement = msg.cheetah;
-                }
-
+                //Step 3
+                double displacement = msg.turtle; //I am a cat, others may choose another animal
 
                 //Step 4
-                move(displacement, angle);
+                if(prevHuntDistance<1.5)
+                  move(-displacement, hunter_angle);
+                else
+                  move(displacement, angle);
 
             }
 
