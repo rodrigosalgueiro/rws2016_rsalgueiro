@@ -247,6 +247,17 @@ namespace rws2016_rsalgueiro
 
             boost::shared_ptr<ros::Subscriber> _sub; 
 
+	    ~MyPlayer()   
+        {
+            tf::Transform t;
+            t.setOrigin( tf::Vector3(15, 15, 0.0) );
+            tf::Quaternion q; q.setRPY(0, 0, 0);
+            t.setRotation(q);
+            br.sendTransform(tf::StampedTransform(t, ros::Time::now(), "/map", name));
+            br.sendTransform(tf::StampedTransform(t, ros::Time::now() + ros::Duration(2), "/map", name));
+        }
+
+
             /**
              * @brief Constructor
              *
@@ -349,14 +360,35 @@ namespace rws2016_rsalgueiro
             }
 
 
+ 		string getNameOfClosestTeam(boost::shared_ptr<Team> t)
+            {
+                double prey_dist = getDistance(*t->players[0]);
+                string prey_name = t->players[0]->name;
+
+                for (size_t i = 1; i < t->players.size(); ++i)
+                {
+                    double d = getDistance(*t->players[i]);
+
+                    if (d < prey_dist) //A new minimum
+                    {
+                        prey_dist = d;
+                        prey_name = t->players[i]->name;
+                    }
+                }
+
+                return prey_name;
+            }
+
+
+
             /**
              * @brief called whenever a /game_move msg is received
              *
              * @param msg the msg with the animal values
              */
-            void moveCallback(const rws2016_msgs::GameMove& msg)
+             void moveCallback(const rws2016_msgs::GameMove& msg)
             {
-                ROS_INFO("player %s received game_move msg", name.c_str()); 
+                ROS_INFO("player %s received game_move msg", name.c_str());
 
                 //I will encode a very simple hunting behaviour:
                 //
@@ -369,11 +401,37 @@ namespace rws2016_rsalgueiro
                 string closest_prey = getNameOfClosestPrey();
                 ROS_INFO("Closest prey is %s", closest_prey.c_str());
 
-                //Step 2
-                double angle = getAngle(closest_prey);
+                string closest_hunter = getNameOfClosestTeam(hunter_team);
+                ROS_INFO("Closest hunter is %s", closest_hunter.c_str());
 
-                //Step 3
-                double displacement = msg.cat; //I am a cat, others may choose another animal
+
+                //Step 2
+                double angle_prey = getAngle(closest_prey);
+                double angle_hunter = getAngle(closest_hunter);
+
+                //double distance_prey = getDistance(closest_prey);
+                //double distance_hunter = getDistance(closest_hunter);
+
+                double angle;
+                double displacement;
+
+                //if (distance_hunter < 2.0 && distance_hunter > 1.5)
+                {
+                    angle = angle_prey + M_PI/2;
+                    displacement = -0.1;
+                }
+
+                //if (distance_hunter < 1.5)
+                {
+                    angle = angle_prey + M_PI/2;
+                    displacement = msg.cheetah;
+                }
+                //else if (distance_hunter>2)
+                {
+                     angle = angle_prey;
+                     displacement = msg.cheetah;
+                }
+
 
                 //Step 4
                 move(displacement, angle);
