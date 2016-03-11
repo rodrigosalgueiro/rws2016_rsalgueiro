@@ -276,7 +276,10 @@ namespace rws2016_rsalgueiro
             //Initialize position according to team
             ros::Duration(0.5).sleep(); //sleep to make sure the time is correct
             tf::Transform t;
-            srand((unsigned)time(NULL)); // To start the player in a random location
+            //srand((unsigned)time(NULL)); // To start the player in a random location
+            struct timeval t1;      
+            gettimeofday(&t1, NULL);
+        srand(t1.tv_usec);
             double X=((((double)rand()/(double)RAND_MAX) ) * 2 -1) * 5 ;
             double Y=((((double)rand()/(double)RAND_MAX) ) * 2 -1) * 5 ;
             t.setOrigin( tf::Vector3(X, Y, 0.0) );
@@ -287,6 +290,7 @@ namespace rws2016_rsalgueiro
             //initialize the subscriber
             _sub = (boost::shared_ptr<ros::Subscriber>) new ros::Subscriber;
             *_sub = node.subscribe("/game_move", 1, &MyPlayer::moveCallback, this);
+
 
         }
 
@@ -299,13 +303,13 @@ namespace rws2016_rsalgueiro
             void move(double displacement, double turn_angle)
             {
                 //Put arguments withing authorized boundaries
-                double max_d =  1; 
+                double max_d =  10; 
                 displacement = (displacement > max_d ? max_d : displacement);
 
                 double min_d =  -0.1; 
                 displacement = (displacement < min_d ? min_d : displacement);
 
-                double max_t =  (M_PI/30);
+                double max_t =  (M_PI/10);
                 if (turn_angle > max_t)
                     turn_angle = max_t;
                 else if (turn_angle < -max_t)
