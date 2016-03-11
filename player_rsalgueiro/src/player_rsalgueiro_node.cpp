@@ -303,13 +303,13 @@ namespace rws2016_rsalgueiro
             void move(double displacement, double turn_angle)
             {
                 //Put arguments withing authorized boundaries
-                double max_d =  10; 
+                double max_d =  1; 
                 displacement = (displacement > max_d ? max_d : displacement);
 
                 double min_d =  -0.1; 
                 displacement = (displacement < min_d ? min_d : displacement);
 
-                double max_t =  (M_PI/10);
+                double max_t =  (M_PI/30);
                 if (turn_angle > max_t)
                     turn_angle = max_t;
                 else if (turn_angle < -max_t)
